@@ -13,6 +13,7 @@ import requests
 import json
 import os
 import re
+import getpass
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # 警告等级
 
@@ -27,43 +28,41 @@ def user():
     return name
 
 
-def login():
+def phone_info():
+    while True:
+        phone = input("请输入手机号码(非大陆号码格式+1-2134578964): ")
+        sre_m = re.compile(r"(\+\d+)\-(\d+)|(\d+)").match(phone)
+        if sre_m is not None:
+            country, phone_ab, phone_cn = sre_m.groups()
+            if phone_cn is None:
+                return country, phone_ab
+            else:
+                return "+86", phone_cn
+
+
+def phone_password():
+    return getpass.getpass("请输入密码: ")
+
+
+def login(phone, password: str):
     print(datetime.now(), "程序开启")
     driver.get("https://pc.xuexi.cn/points/login.html")
-    try:
-        remover = WebDriverWait(driver, 30, 0.2).until(lambda driver: driver.find_element_by_class_name("redflagbox"))
-    except exceptions.TimeoutException:
-        pass
-    else:
-        driver.execute_script('arguments[0].remove()', remover)
-    try:
-        remover = WebDriverWait(driver, 30, 0.2).until(lambda driver: driver.find_element_by_class_name("header"))
-    except exceptions.TimeoutException:
-        pass
-    else:
-        driver.execute_script('arguments[0].remove()', remover)
-    try:
-        remover = WebDriverWait(driver, 30, 0.2).until(lambda driver: driver.find_element_by_class_name("footer"))
-    except exceptions.TimeoutException:
-        pass
-    else:
-        driver.execute_script('arguments[0].remove()', remover)
-        js = 'var link = document.createElement("a");' \
-             'link.href="https://login.dingtalk.com/login/index.htm?goto=https%3A%2F%2Foapi.dingtalk.com%2Fconnect%2Foauth2%2Fsns_authorize%3Fappid%3Ddingoankubyrfkttorhpou%26response_type%3Dcode%26scope%3Dsnsapi_login%26redirect_uri%3Dhttps%3A%2F%2Fpc-api.xuexi.cn%2Fopen%2Fapi%2Fsns%2Fcallback";' \
-             'document.getElementById("app").appendChild(link);' \
-             'link.innerHTML="钉钉账号登陆";' \
-             'link.style.cssText = "display:block;margin:10px auto;font-size: 16px;background-color: #008be6;color: white;text-align: center;text-decoration: none;width:214px;height:26px;border-radius:8px;;"'
-        driver.execute_script(js)
+    driver.get("https://login.dingtalk.com/login/index.htm?goto=https%3A%2F%2Foapi.dingtalk.com%2Fconnect%2Foauth2%2Fsns_authorize%3Fappid%3Ddingoankubyrfkttorhpou%26response_type%3Dcode%26scope%3Dsnsapi_login%26redirect_uri%3Dhttps%3A%2F%2Fpc-api.xuexi.cn%2Fopen%2Fapi%2Fsns%2Fcallback")
 
-        driver.execute_script('window.scrollTo(document.body.scrollWidth/2 - 200 , 0)')
-    print(datetime.now(), "此刻请扫描二维码...")
+    driver.find_element_by_xpath("//select[@class='country_code_select']/option[@value='{}']".format(phone[0])).click()
+    driver.find_element_by_xpath("//div[@id='mobilePlaceholder']").click()
+    driver.find_element_by_xpath("//input[@id='mobile']").send_keys(phone[1])
+    driver.execute_script("document.getElementById('pwd').setAttribute('style', 'display: inline-block')")
+    driver.find_element_by_xpath("//input[@id='pwd']").click()
+    driver.find_element_by_xpath("//input[@id='pwd']").send_keys(password)
+    driver.find_element_by_xpath("//a[@id='loginBtn']").click()
 
     WebDriverWait(driver, 270).until(EC.title_is(u"我的学习"))
     cookies = driver.get_cookies()
     with open("./user/{}/cookies.txt".format(user_name), "w") as fp:
         json.dump(cookies, fp)
 
-    check()
+    check(phone, password)
 
 
 def readpoint(driver):
@@ -80,7 +79,7 @@ def readpoint(driver):
     return readnum, videonum, readtime, videotime
 
 
-def check():
+def check(phone, password):
     driver.get("https://pc.xuexi.cn/points/my-study.html")  # 读取上下文
     print("正在校验用户，现在请勿扫描二维码等待程序提示！！！")
     driver.delete_all_cookies()  # 删除未登陆cookie
@@ -104,10 +103,10 @@ def check():
             learn_main(cookies, readnum, videonum, readtime, videotime)
         except exceptions.TimeoutException:
             print("服务器登陆状态失效，请重新登陆")
-            login()
+            login(phone, password)
     else:
         print("服务器登陆状态失效，请重新登陆")
-        login()
+        login(phone, password)
 
 
 def get_list():
@@ -235,6 +234,8 @@ def learn_main(cookies, readnum, videonum, readtime, videotime):
 if __name__ == '__main__':
     info()
     user_name = user()
+    phone = phone_info()
+    password = phone_password()
     # desired_capabilities = DesiredCapabilities.CHROME  # 修改页面加载策略
     # desired_capabilities["pageLoadStrategy"] = "none"  # 注释这两行会导致最后输出结果的延迟，即等待页面加载完成再输出
     options = Options()
@@ -242,14 +243,14 @@ if __name__ == '__main__':
     options.add_argument('blink-settings=imagesEnabled=false')  # 不加载图片, 提升速度
     options.add_argument('--mute-audio')  # 关闭声音
     options.add_argument('--window-size=400,500')
-    options.add_argument('--window-position=800,0')
+    options.add_argument('--headless')
     driver = webdriver.Chrome(executable_path="./chromedriver.exe", chrome_options=options)  # 实例化chrome
     if os.path.exists("./user/{}".format(user_name)):
         pass
         if os.path.exists("./user/{}/cookies.txt".format(user_name)):
-            check()
+            check(phone, password)
         else:
-            login()
+            login(phone, password)
     else:
         os.makedirs("./user/{}".format(user_name))
-        login()
+        login(phone, password)
